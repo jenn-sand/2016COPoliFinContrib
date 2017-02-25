@@ -1,6 +1,13 @@
-2016 Colorado Political Financial Contributions
+---
+title: "2016 Colorado Financial Contributions"
+author: "Jennifer (Jenni) D Sanders"
+output:
+  html_document: 
+    smart: no
+  pdf_document: default
+---
+
 ========================================================
-#dates formatting thanks to %b definition on https://www.r-bloggers.com/date-formats-in-r/
 ```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
 # Load all of the packages that you end up using
 # in your analysis in this code chunk.
@@ -9,6 +16,7 @@
 # This prevents the code from displaying in the knitted HTML output.
 # You should set echo=FALSE for all code chunks in your file.
 
+# dates formatting thanks to definition on https://www.r-bloggers.com/date-formats-in-r/
 library(openxlsx)
 library(memisc)
 library(ggplot2)
@@ -28,7 +36,6 @@ library(gridExtra)
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
 ```{r echo=FALSE, Load_the_Data}
 # Load the Data
 pfc <- read.table("P00000001-CO.csv", header = TRUE, sep = ",", row.names = NULL)
@@ -51,10 +58,12 @@ pfc$zip <- substr(pfc$contbr_zip, 1, 5)
 #pull in the ZCTA from the colo_zip_cw df
 pfc <- left_join(pfc, colo_zip_cw[ , c("ZIP", "ZCTA_USE")], by = c("zip" = "ZIP"))
 
+
+rm(ztca_cw)
 #head(pfc)
 ```
 # Basic Data
-```{r}
+```{r cleanup_dates, include=FALSE}
 str(pfc)
 #dim(pfc) #we have 164206 observations of 18 var
 head(pfc)
@@ -62,7 +71,7 @@ head(pfc)
 #receipt date should really be a date:
 pfc$contb_receipt_dt <- as.Date(pfc$contb_receipt_dt, "%d-%b-%y")
 ```
-```{r}
+```{r map_parties, include=FALSE}
 #let's add party so we can roll the data up a bit, the republican field was *busy* in 2016
 #idea for party logic here: http://stackoverflow.com/questions/4622060/case-statement-equivalent-in-r
 pfc$cand_party = factor(pfc$cand_id)
@@ -76,7 +85,7 @@ levels(pfc$cand_party) <- list(
   independent = c("P60022654"))
 ```
 
-```{r}
+```{r map_retiree_status, include=FALSE}
 #As we don't have age data, I'd like to be able to compare retirees:non-retirees
 pfc <- mutate(pfc, retiree_status = if_else(
      (grepl("RETIRED", contbr_employer) | grepl("RETIRED", contbr_occupation)),
@@ -124,7 +133,7 @@ plot_ly(x = pfc$cand_nm, data = pfc, type = "histogram")
 plot_ly(x = pfc$cand_party, data = pfc, type = "histogram")
 ```
 
-```{r}
+```{r echo = FALSE, donations_by_party}
 #histogram is super skewed, try a pie chart
 donations_by_party <- pfc %>%
   group_by(cand_party) %>% 
@@ -142,7 +151,7 @@ donations_by_party %>%
 ```
 
 # Univariate Analysis
-```{r}
+```{r echo = FALSE, contribution_amounts}
 summary(pfc)
 ```
 ```{r}
@@ -180,7 +189,7 @@ There were a lot of donations that seemed centered around zero.  I did exclude t
 
 
 # Bivariate Plots Section
-```{r echo = FALSE, Bivariate Funding Histograms}
+```{r echo = FALSE, Bivariate_Funding_Histograms}
 #Did the giving patterns (many small donations, few large donations) vary across candidates?
 #using log10 because these are financial amounts, and diff candidates (naturally) received very diff amounts in this state.  I'm not interested in how much total they received, but what that distro looks like
 ggplot(aes(x = contb_receipt_amt), data = subset(pfc, !is.na(contb_receipt_amt) & !is.na(cand_nm))) +
@@ -201,14 +210,14 @@ p <- ggplot(aes(x = contb_receipt_amt), data = subset(pfc, !is.na(contb_receipt_
 ggplotly(p)
 ```
 
-```{r echo = FALSE, Bivariate Funding Density}
+```{r echo = FALSE, Bivariate_Funding_Density}
 #same idea, different angle -- $ by candidate
 qplot(contb_receipt_amt, ..density.., data = pfc, geom = "freqpoly",
   binwidth = 1000, colour = cand_nm)
 
 #that was atrocious.  TODO: Do multi-variate analysis in that section.
 ```
-```{r echo = FALSE, party funding density}
+```{r echo = FALSE, party_funding_density}
 #excluding refunds, let's look at donations by party (also excluding top 1%)
 #do specific parties get more high-dollar donations?
 qplot(contb_receipt_amt, ..density.., data = pfc, geom = "freqpoly",
@@ -217,7 +226,7 @@ qplot(contb_receipt_amt, ..density.., data = pfc, geom = "freqpoly",
 ```
 
 
-```{r echo = FALSE, donations over time}
+```{r echo = FALSE, donations_over_time}
 #Did larger/smaller donations come in at different points in the election cycle?
 #ylim to exclude some outliers
 ggplot(aes(x = contb_receipt_dt, y = contb_receipt_amt), data = pfc) +
@@ -242,7 +251,7 @@ pfc %>%
   facet_wrap(~cand_party)
 ```
 
-```{r ECHO = FALSE, data map of $}
+```{r ECHO = FALSE, data_map_of_dollars}
 #I've heard there's a strong rural/urban funding divide -- visible in this data?
 pfc.contb_by_zip <- pfc %>% 
   #only include contributions where the zip code is in CO, and the zip exists
@@ -261,7 +270,7 @@ rm(pfc.contb_by_zip)
 ```
 
 # Bivariate Analysis
-```{r}
+```{r echo = FALSE, Refunds}
 #there were several misc refunds in the memo data in uni-variate
 refunds <- subset(pfc, grepl("REFUND", pfc$memo_text))
 
@@ -274,7 +283,7 @@ refunds %>%
 rm(refunds)
 ```
 
-```{r}
+```{r echo = FALSE, Amounts_by_Candidate}
 #how different were the average amounts for each candidate?
 #the story in the news was that the democratic candidates were receiving more money through more frequent, smaller donations.
 donations_by_candidate <- pfc %>% 
@@ -292,15 +301,13 @@ rm(donations_by_candidate)
 #data in this reflects the news story!
 ```
 
-```{r}
+```{r echo = FALSE, donations_by_party_summary}
 #how different were average amounts by party? Since Dean's presidential campaign, dems have supposedly had an edge on smaller/frequent donations
 #(summary df made above for charting)
 donations_by_party
-
-rm(donations_by_party)
 ```
 
-```{r}
+```{r echo = FALSE, donations_by_city}
 #donations by city?  do rural areas contribute less to political donations due to high-paying jobs often being concentrated in urban areas?
 pfc %>%
   group_by(contbr_city) %>% 
@@ -323,7 +330,7 @@ donations_by_retiree <-pfc %>%
 donations_by_retiree
 ```
 
-```{r}
+```{r echo = FALSE, retiree_party}
 #are retirees in Colorado more likely to be democrat or republican?
 donations_by_retiree_xtable <- 
   filter(donations_by_retiree, cand_party %in% c("democrat", "republican")) %>% 
@@ -337,7 +344,7 @@ rm(donations_by_retiree_xtable)
 ```
 
 
-```{r ECHO = FALSE}
+```{r ECHO = FALSE, earmarked_summary}
 #were earmarked funds more likely to be higher amounts?
 pfc %>% 
   group_by(if_else(
@@ -406,7 +413,7 @@ frequent_contributors %>%
   scale_y_log10()
 ```
 
-```{r}
+```{r echo = FALSE, Financials_by_Retiree_status}
 #how do financial amounts vary for retirees vs non-retirees with political party?
 ggplotly(ggplot(pfc, aes(x = retiree_status, y=contb_receipt_amt)) +
   geom_violin(aes(fill = cand_party)))
@@ -419,7 +426,7 @@ ggplot(aes(x = cand_party, y=total_donation), data = filter(donations_by_retiree
 
 
 
-```{r}
+```{r echo = FALSE, Rural_Urban_Party}
 #Was there a strong divide for rural/urban on party line funding?
 
 pfc.contb_by_zip_party <- pfc %>% 
@@ -442,7 +449,7 @@ filter(pfc.contb_by_zip_party, cand_party == 'republican') %>%
 
 ```
 
-```{r}
+```{r echo = FALSE, Rural_Urban_Difference}
 #that wasn't very visually helpful--let's look at the spread between the two specifically
 pfc.contb_zipparty_rollup <- 
   tidyr::spread(select(pfc.contb_by_zip_party, region, value, cand_party), cand_party, value) %>% 
@@ -451,7 +458,7 @@ pfc.contb_zipparty_rollup <-
 
 zip_choropleth(pfc.contb_zipparty_rollup, title = "Democrat/Republican Donation Difference by Zip Code", zip_zoom = colo_zip_cw$ZCTA_USE)
 ```
-```{r}
+```{r echo = FALSE, Earmarked_Total_Comparison}
 #were larger funds earmarked?
 pfc %>% 
   #mutate to add a column for "EARMARK" in memo vs not
@@ -469,7 +476,7 @@ pfc %>%
 
 
 # Multivariate Analysis
-```{r}
+```{r echo = FALSE, Retiree_Status_Amount_difference}
 #did the retiree/non-retiree donation split hard on party line on money, not amount?
 donations_by_retiree_xtable <- 
   filter(donations_by_retiree, cand_party %in% c("democrat", "republican")) %>% 
@@ -489,20 +496,22 @@ phi(data.matrix(select(donations_by_retiree_xtable, not_retired, retired)), digi
 #phi is -0.07, that's even closer to zero
 
 rm(donations_by_retiree_xtable)
-rm(donations_by_retiree)
+
+rm(pfc)
 ```
 
-```{r}
+```{r echo = FALSE, Donation_Frequency_Amount_Model}
 #Is there a relationship between donation frequency & amount?
 m1 <- lm(I(total_donation) ~I(number_of_donations), data = frequent_contributors)
 m2 <- update(m1, ~ . + cand_party)
-m3 <- update(m2, ~ . + contbr_zip)
+#m3 <- update(m2, ~ . + contbr_zip)
 
 mtable(m1, m2)
+
+rm(frequent_contributors)
 ```
 #^That is an awful model.
-
-#I'm not seeing a predictible relationship between the variables here, I suspect there's hidden motivators not in this data set.
+I'm not seeing a predictible relationship between the variables here, I suspect there's hidden motivators not in this data set.
 
 
 ### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
@@ -520,39 +529,57 @@ I created a model and was completely unable to predict where someone would donat
 
 ### Plot One
 ```{r echo=FALSE, Plot_One}
-donations_by_party %>% 
-  plot_ly(labels = ~cand_party, values = ~total_donation, type = 'pie') %>% 
+p <- plot_ly(donations_by_party, labels = ~cand_party, values = ~total_donation, type = 'pie',
+          textposition = 'inside',
+          textinfo = 'label+percent',
+          insidetextfont = list(color = "#FFFFFF"), #white to make it pop
+          hoverinfo = 'text',
+          text = ~paste(cand_party, '$', total_donation, 'dollars'),
+          marker = list(colors = colors,
+                        line = list(color = "#FFFFFF, width = 1")),
+          showlegend = FALSE) %>% 
   layout(title = 'United States Colorado Political Donations by Party in 2016 Election',
-         #showgrid = FALSE hides the grid. zeroline is the 0,0 line, ticklabels are the numbers on grid.
+         #showgrid = FALSE hides the grid. zeroline is the 0,0 line,
+            #ticklabels are the numbers on grid.
          xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
          yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+
+ggplotly(p, filename = "pie/styled")
+
+rm(donations_by_party)
+rm(p)
 ```
 
 ### Description One
 The majority of moneys donated in the 2016 election from Colorado residents was for Democratic candidates; 10.93 million Democratic to 5.76 million Republican.
 
 ### Plot Two
-```{r echo=FALSE, Plot_Three}
-ggplotly(ggplot(aes(x = cand_party, y=total_donation / 1000 ),
-         data = filter(donations_by_retiree,
-                       cand_party %in% c("democrat", "republican"))) +
-    geom_col(aes(fill = retiree_status)) +
-    labs(x = "Candidate Party", y = "Total Donated Dollars in Thousands",
-         title = "2016 Presidential Election Donations from Colorado",
-         subtitle = "Colored by Retiree Status",
-         fill = "Retiree Status"))
+```{r echo=FALSE, Plot_Two}
+ggplot(aes(x = cand_party, y=total_donation / 1000 ),
+       data = filter(donations_by_retiree,
+                     cand_party %in% c("democrat", "republican"))) +
+  geom_col(aes(fill = retiree_status)) +
+  labs(x = "Candidate Party", y = "Total Donated Dollars in Thousands",
+       title = "2016 Presidential Election Donations from Colorado",
+       subtitle = "Colored by Retiree Status",
+       fill = "Retiree Status")
+
+rm(donations_by_retiree)
 ```
 
 ### Description Two
 The Democrat/Republican donation split for retirees in Colorado is almost purple, barely leaning Democratic.  However, the non-retiree population's donations are financially heavily Democratic.  This fits in nicely with the local wisdom that the urban areas vote Democratic, while the prarie votes Republican.
 
 ### Plot Three
-```{r echo=FALSE, Plot_Two}
+```{r echo=FALSE, Plot_Three}
 zip_choropleth(pfc.contb_zipparty_rollup,
                title = "Democrat/Republican Donation Difference by Zip Code",
                legend = "Monetary Difference",
                zip_zoom = colo_zip_cw$ZCTA_USE,
                reference_map = TRUE)
+
+rm(pfc.contb_zipparty_rollup)
+rm(colo_zip_cw)
 ```
 
 ### Description Three
