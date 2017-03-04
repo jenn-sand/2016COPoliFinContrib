@@ -145,8 +145,7 @@ y <- list(
   showticklabels = TRUE
 )
 
-plot_ly(c, x = c$contbr_zip, type = "scatter", mode="lines", text = ~paste('Zip: ', contbr_zip)) %>% 
-        layout(xaxis = x, yaxis = y, showlegend = FALSE)
+plot_ly(c, x = ~contbr_zip, y = ~log10(s), type = "bar", text = ~paste('Zip: ', contbr_zip)) 
 rm(c)
 ```
 
@@ -249,7 +248,7 @@ We could roll up to see how much each candidate received as a whole, or how much
 Each candidate is ID'd, and eafch contributor is specifically named, along with the date of hteir contribution and the amount of their contribution. Any memos with specific earmarks or refund memos are designated clearly.
 
 ### Did you create any new variables from existing variables in the dataset?
-No.
+Yes, I created a variable for party affiliation and a variable for ZCTA codes.
 
 ### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
 I transformed the date into date format to make summary analysis simpler on that variable.
@@ -295,6 +294,7 @@ ggplot(aes(x = contb_receipt_dt, y = contb_receipt_amt), data = pfc) +
 ```
 
 Which party earmarked more funds?
+
 ```{r earmarked_by_party}
 pfc %>% 
   #mutate to add a column for "EARMARK" in memo vs not
@@ -539,6 +539,7 @@ zip_choropleth(pfc.contb_zipparty_rollup, title = "Democrat/Republican Donation 
 ```
 
 Were larger funds earmarked?
+
 ```{r echo = FALSE, Earmarked_Total_Comparison}
 pfc %>% 
   #mutate to add a column for "EARMARK" in memo vs not
@@ -667,11 +668,13 @@ rm(pfc.contb_zipparty_rollup)
 rm(colo_zip_cw)
 ```
 
-### Description Three
+### Description Two
 I overlaid the map to show how high population areas and 'resort' areas donated significantly more funds to Democratic candidates than Republican candidates in the 2016 election cycle.  The N/A areas are areas with very low population.  I'm using ZCTA instead of true Zip code because choropleth runs off ZCTA, as does census data.  In this graph, the bluest areas are the areas with the highest funding difference in favor of the Democratic party.
+
 ------
 
 # Reflection
+
 I validated several stories that had been trending in the news during the election cycle in this data set.  
 
 I often heard Colorado referred to as 'purple', leaning between Democratic and Republican, so I checked to see if the financial donations reflected that even split.  This was not the case in the overall donation sums between the two parties.  
