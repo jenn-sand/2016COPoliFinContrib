@@ -57,7 +57,8 @@ colo_zip_cw <- subset(ztca_cw, ztca_cw$StateAbbr == "CO")
 pfc$zip <- substr(pfc$contbr_zip, 1, 5)
 
 #pull in the ZCTA from the colo_zip_cw df
-pfc <- left_join(pfc, colo_zip_cw[ , c("ZIP", "ZCTA_USE")], by = c("zip" = "ZIP"))
+pfc <- left_join(pfc,
+                 colo_zip_cw[ , c("ZIP", "ZCTA_USE")], by = c("zip" = "ZIP"))
 
 
 rm(ztca_cw)
@@ -67,6 +68,7 @@ rm(ztca_cw)
 str(pfc)
 #dim(pfc) #we have 164206 observations of 18 var
 ```
+
 We have 164206 observations of 20 variables.
 
 Let's add party so we can roll the data up a bit, the republican field was *busy* in 2016.
@@ -75,13 +77,15 @@ The idea for party logic here: http://stackoverflow.com/questions/4622060/case-s
 pfc$cand_party = factor(pfc$cand_id)
 levels(pfc$cand_party) <- list(
   democrat = c("P00003392", "P60007168", "P60007671", "P60008885", "P60009685"),
-  republican = c("P20002721", "P20003281", "P40003576", "P60003670", "P60005915", "P60006046",
-                 "P60006111", "P60006723", "P60007242", "P60007572", "P60007697", "P60008059",
-                 "P60008398", "P60008521", "P80001571", "P80003379", "P80003478"),
+  republican = c("P20002721", "P20003281", "P40003576", "P60003670", "P60005915",
+                 "P60006046", "P60006111", "P60006723", "P60007242", "P60007572",
+                 "P60007697", "P60008059", "P60008398", "P60008521", "P80001571",
+                 "P80003379", "P80003478"),
   libertarian = c("P20002671"),
   green = c("P20003984"),
   independent = c("P60022654"))
 ```
+
 As we don't have age data, I'd like to be able to compare retirees:non-retirees; adding a variable for retiree status.
 ```{r map_retiree_status}
 pfc <- mutate(pfc, retiree_status = if_else(
@@ -106,33 +110,73 @@ pfc$contb_receipt_dt <- as.Date(pfc$contb_receipt_dt, "%d-%b-%y")
 ggplotly(ggplot(data = pfc, aes(x = contb_receipt_amt)) +
   geom_histogram())
 ```
-That's a lot of receipts with a 0 amount. Exclude the top 1% of contributions to zoom in a bit.
+
+That's a lot of receipts with a 0 amount. Exclude contributions below zero to zoom in a bit.
 ```{r contb_receipt_amt_histogram}
-ggplotly(
-  ggplot(data = pfc, aes(x = contb_receipt_amt)) +
-    geom_histogram() +
-    #limit x axis to omit top 1% of val
-    xlim(0, quantile((pfc$contb_receipt_amt), 0.99))
-)
+p1 <- ggplot(aes(x = contb_receipt_amt),
+            data = subset(pfc, contb_receipt_amt>0)) +
+  geom_histogram(bins=30) + scale_x_log10()
+
+p2 <- ggplot(aes(x=1, y=contb_receipt_amt),
+             data = subset(pfc,contb_receipt_amt>0)) +
+  geom_boxplot() + scale_y_log10()
+
+p <- subplot(p1,p2)
+
+grid.arrange(p1, p2, nrow=1)
+
 ```
+
 Are there zip codes more likely to contribute?
 ```{r zip_code_contb}
-plot_ly(x = pfc$contbr_zip, data = pfc, type = "histogram")
+c <- pfc %>% 
+  group_by(contbr_zip) %>% 
+  summarise(s = sum(contb_receipt_amt)) %>% 
+  arrange(s)
+pfc$contbr_zip <- factor(pfc$contbr_zip, levels=c[["contbr_zip"]])
+
+x <- list(
+  title = "Zip Codes",
+  showticklabels = TRUE
+)
+
+y <- list(
+  title = "Total Donated",
+  showticklabels = TRUE
+)
+
+plot_ly(c, x = c$contbr_zip, type = "scatter", mode="lines", text = ~paste('Zip: ', contbr_zip)) %>% 
+        layout(xaxis = x, yaxis = y, showlegend = FALSE)
+rm(c)
 ```
+
 Too specific.  Are there cities more likely to contribute?
+Taking the log10 of donation frequency as Boulder and Denver donated more by orders of magnitude.
 ```{r}
-plot_ly(x = pfc$contbr_city, data = pfc, type = "histogram")
-#I see you, Denver.  Then Boulder, where people can work in Denver.
+lg_city_list <- pfc %>% 
+  group_by(contbr_city) %>% 
+  filter(n() > 100) %>% 
+  summarise(n = n())
+
+plot_ly(lg_city_list, x = ~contbr_city) %>% 
+  add_trace(y = ~log10(n), name = "Log10 of Number of Donations") %>% 
+  layout(yaxis = list(type = "log"), title = "Log10 of Donations by City")
+
+rm(lg_city_list)
+
 ```
+
 Are there occupations that are more likely to contribute?
 ```{r}
 plot_ly(x = pfc$contbr_occupation, data = pfc, type = "histogram")
 ```
+
 The largest groups are retirees. I did not expect retirees to be donating so actively.
 Which candidate received more donations? I've heard Colorado is fairly purple.
 ```{r}
 plot_ly(x = pfc$cand_nm, data = pfc, type = "histogram")
 ```
+
 Let's check that by party
 ```{r}
 plot_ly(x = pfc$cand_party, data = pfc, type = "histogram")
@@ -149,29 +193,43 @@ donations_by_party <- pfc %>%
 
 donations_by_party %>% 
   plot_ly(labels = ~cand_party, values = ~total_donation, type = 'pie') %>% 
-  layout(title = 'United States Colorado Political Donations by Party in 2016 Election',
-         #showgrid = FALSE hides the grid. zeroline is the 0,0 line, ticklabels are the numbers on grid.
-         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
-         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+  layout(
+    title = 'United States Colorado Political Donations by Party in 2016 Election',
+    #showgrid = FALSE hides the grid. zeroline is the 0,0 line, ticklabels are the numbers on grid.
+    xaxis = list(
+      showgrid = FALSE,
+      zeroline = FALSE,
+      showticklabels = FALSE
+      ),
+    yaxis = list(
+      showgrid = FALSE,
+      zeroline = FALSE,
+      showticklabels = FALSE
+      )
+    )
 ```
 
 # Univariate Analysis
 ```{r echo = FALSE, contribution_amounts}
 summary(pfc)
 ```
+
 Some of these people were contributing early and often.  I'll compare those to the 2015-2016 contribution limits here later: http://www.fec.gov/info/contriblimitschart1516.pdf
 ```{r}
 summary(pfc$contb_receipt_amt)
 ```
+
 The histogram on contributions had a large group around zero -- are there a large number of zero contributions?
 ```{r Number of 0 contributions}
 length(which(pfc$contb_receipt_amt == 0))
 ```
+
 Not a lot of zero contributions, interesting.  How long did the donation season extend?  
 There was some news speculation that large donors were waiting for the primaries to thin out.
 ```{r donation_timeline}
 summary(pfc$contb_receipt_dt)
 ```
+
 What about the memos on the donations?  That may have some interesting information.
 ```{r donation_memos}
 pfc %>% 
@@ -202,12 +260,11 @@ There were a lot of donations that seemed centered around zero.  I did exclude t
 Did the giving patterns (many small donations, few large donations) vary across candidates?
 Using log10 because these are financial amounts, and diff candidates (naturally) received very diff amounts in this state.  I'm not interested in how much total they received, but what that distro looks like.
 ```{r echo = FALSE, Bivariate_Funding_Histograms}
-ggplot(aes(x = contb_receipt_amt), data = subset(pfc, !is.na(contb_receipt_amt) & !is.na(cand_nm))) +
-  geom_histogram() +
-  scale_x_log10() +
-  scale_y_log10() +
-  facet_wrap( ~ cand_nm)
+plot_ly(subset(pfc, contb_receipt_amt > 0 & !is.na(cand_nm)),
+        y = ~log10(contb_receipt_amt), x = ~cand_nm, color = ~cand_party,
+        type = "box")
 ```
+
 Roll that up by party, keep log scale as total coming into various parties has lg difference.
 ```{r}
 p <- ggplot(aes(x = contb_receipt_amt), data = subset(pfc, !is.na(contb_receipt_amt) & !is.na(cand_party))) +
@@ -220,13 +277,6 @@ p <- ggplot(aes(x = contb_receipt_amt), data = subset(pfc, !is.na(contb_receipt_
 ggplotly(p)
 ```
 
-same idea, different angle -- $ by candidate
-```{r echo = FALSE, Bivariate_Funding_Density}
-qplot(contb_receipt_amt, ..density.., data = pfc, geom = "freqpoly",
-  binwidth = 1000, colour = cand_nm)
-```
-
-That's beyond busy and not very useful.
 Excluding refunds, let's look at donations by party (also excluding top 1%)
 Do specific parties get more high-dollar donations?
 ```{r echo = FALSE, party_funding_density}
@@ -243,6 +293,7 @@ ggplot(aes(x = contb_receipt_dt, y = contb_receipt_amt), data = pfc) +
   geom_jitter(alpha = 1/20, shape = 21, fill = I('#3399FF')) +
   ylim(-3000, 3000)
 ```
+
 Which party earmarked more funds?
 ```{r earmarked_by_party}
 pfc %>% 
@@ -260,6 +311,7 @@ pfc %>%
   scale_y_log10() +
   facet_wrap(~cand_party)
 ```
+
 I've heard there's a strong rural/urban funding divide -- visible in this data?
 ```{r ECHO = FALSE, data_map_of_dollars}
 pfc.contb_by_zip <- pfc %>% 
@@ -272,10 +324,12 @@ pfc.contb_by_zip <- pfc %>%
 colnames(pfc.contb_by_zip)[1] <- "region"
 
 #use the ZCTA_USE list (Colorado zips in ZCTA format) to zoom:
-zip_choropleth(pfc.contb_by_zip, title = "Donations by Zip Code", zip_zoom = colo_zip_cw$ZCTA_USE)
+zip_choropleth(pfc.contb_by_zip, title = "Donations by Zip Code",
+               zip_zoom = colo_zip_cw$ZCTA_USE)
 
 rm(pfc.contb_by_zip)
 ```
+
 This seems to reflect the histogram of cities showing that most of the money came from urban.
 
 # Bivariate Analysis
@@ -291,6 +345,7 @@ refunds %>%
 
 rm(refunds)
 ```
+
 How different were the average amounts for each candidate?
 The story in the news was that the democratic candidates were receiving more money through more frequent, smaller donations.
 ```{r echo = FALSE, Amounts_by_Candidate}
@@ -307,12 +362,14 @@ donations_by_candidate
 
 rm(donations_by_candidate)
 ```
+
 Data in this reflects the news story!
 How different were average amounts by party? Since Dean's presidential campaign, dems have supposedly had an edge on smaller/frequent donations.
 ```{r echo = FALSE, donations_by_party_summary}
 #(summary df made above for charting)
 donations_by_party
 ```
+
 Donations by city?  do rural areas contribute less to political donations due to high-paying jobs often being concentrated in urban areas?
 ```{r echo = FALSE, donations_by_city}
 pfc %>%
@@ -323,6 +380,7 @@ pfc %>%
                    n = n()) %>% 
   arrange(desc(total_donation))
 ```
+
 First, I saw a story that reported researchers using national donation data to find people who donated more than the contribution limit for the 2015-2016 federal elections.  Let's see if that's visible in this data.
 ```{r donations_over_max_legal}
 pfc %>% 
@@ -332,6 +390,7 @@ pfc %>%
   filter(total_donation > 2700) %>% 
   arrange(desc(total_donation))
 ```
+
 There's a lot of donations above the individual to candidate max -- hopefully these are PAC donations that were filed as 'for' a specific candidate.
 
 News stories frequently reported an age difference between party donation. Is that reflected here?
@@ -346,6 +405,7 @@ donations_by_retiree <-pfc %>%
 
 donations_by_retiree
 ```
+
 There's often an age split discussed in political news.  Are retirees in Colorado more likely to be democrat or republican?
 ```{r echo = FALSE, retiree_party}
 donations_by_retiree_xtable <- 
@@ -357,6 +417,7 @@ phi(data.matrix(select(donations_by_retiree_xtable, not_retired, retired)), digi
 
 rm(donations_by_retiree_xtable)
 ```
+
 Phi is close to zero, there is little or no association between retiree status and party in the Colorado donor data.
 
 Were earmarked funds more likely to be higher amounts?
@@ -370,6 +431,7 @@ pfc %>%
                    median_donation = median(contb_receipt_amt),
                    n = n())  
 ```
+
 Were Republicans/Democrats more likely to earmark funds?
 ```{r}
 pfc %>% 
@@ -392,6 +454,7 @@ pfc %>%
   #return two digits
   phi(digits = 2)
 ```
+
 Phi is 0.38, a bit further from zero, weak positive association between party and earmarking funds in the Colorado donor data.
 
 ### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
@@ -425,11 +488,14 @@ frequent_contributors %>%
   scale_x_log10() +
   scale_y_log10()
 ```
+
 How do financial amounts vary for retirees vs non-retirees with political party?
 ```{r echo = FALSE, Financials_by_Retiree_status}
-ggplotly(ggplot(pfc, aes(x = retiree_status, y=contb_receipt_amt)) +
+ggplotly(ggplot(filter(pfc, contb_receipt_amt > 0),
+                aes(x = retiree_status, y=contb_receipt_amt)) +
   geom_violin(aes(fill = cand_party)))
 ```
+
 Were different parties getting more for retirees vs non-retirees?
 ```{r}
 ggplot(aes(x = cand_party, y=total_donation), data = filter(donations_by_retiree, cand_party %in% c("democrat", "republican"))) +
@@ -451,22 +517,27 @@ colnames(pfc.contb_by_zip_party)[1] <- "region"
 
 filter(pfc.contb_by_zip_party, cand_party == 'democrat') %>% 
   select(region, value) %>% 
-  zip_choropleth(title = "Democratic Donations by Zip Code", zip_zoom = colo_zip_cw$ZCTA_USE)
+  zip_choropleth(title = "Democratic Donations by Zip Code",
+                 zip_zoom = colo_zip_cw$ZCTA_USE)
 
 filter(pfc.contb_by_zip_party, cand_party == 'republican') %>% 
   select(region, value) %>% 
-  zip_choropleth(title = "Republican Donations by Zip Code", zip_zoom = colo_zip_cw$ZCTA_USE)
+  zip_choropleth(title = "Republican Donations by Zip Code",
+                 zip_zoom = colo_zip_cw$ZCTA_USE)
 
 ```
+
 That wasn't very visually helpful--let's look at the spread between the two specifically
 ```{r echo = FALSE, Rural_Urban_Difference}
 pfc.contb_zipparty_rollup <- 
-  tidyr::spread(select(pfc.contb_by_zip_party, region, value, cand_party), cand_party, value) %>% 
+  tidyr::spread(select(pfc.contb_by_zip_party, region, value, cand_party)
+                , cand_party, value) %>% 
   mutate(value = democrat - republican) %>% 
   select(region, value)
 
 zip_choropleth(pfc.contb_zipparty_rollup, title = "Democrat/Republican Donation Difference by Zip Code", zip_zoom = colo_zip_cw$ZCTA_USE)
 ```
+
 Were larger funds earmarked?
 ```{r echo = FALSE, Earmarked_Total_Comparison}
 pfc %>% 
@@ -482,6 +553,7 @@ pfc %>%
   geom_bar(stat="identity") +
   facet_wrap(~cand_party)
 ```
+
 Interesting, it looks like smaller funds were more often earmarked.
 
 # Multivariate Analysis
@@ -492,8 +564,10 @@ donations_by_retiree_xtable <-
   select(retiree_status, cand_party, total_donation) %>% 
   tidyr::spread("retiree_status", "total_donation")
 
-phi(data.matrix(select(donations_by_retiree_xtable, not_retired, retired)), digits = 2)
+phi(data.matrix(
+  select(donations_by_retiree_xtable, not_retired, retired)), digits = 2)
 ```
+
 Phi is 0.15, little/no association between retiree status and total donation in the Colorado donor data.
 Is there a relationship between the mean?
 ```{r Retiree_Status_Amount_Mean}
@@ -502,17 +576,20 @@ donations_by_retiree_xtable <-
   select(retiree_status, cand_party, mean_donation) %>% 
   tidyr::spread("retiree_status", "mean_donation")
 
-phi(data.matrix(select(donations_by_retiree_xtable, not_retired, retired)), digits = 2)
+phi(data.matrix(
+  select(donations_by_retiree_xtable, not_retired, retired)), digits = 2)
 
 rm(donations_by_retiree_xtable)
 
 rm(pfc)
 ```
+
 Phi is -0.07, that's even closer to zero, so even a lower association between the mean amount donated and retiree status.
 
 Is there a relationship between donation frequency & amount?
 ```{r echo = FALSE, Donation_Frequency_Amount_Model}
-m1 <- lm(I(total_donation) ~I(number_of_donations), data = frequent_contributors)
+m1 <- lm(I(total_donation) ~I(number_of_donations),
+         data = frequent_contributors)
 m2 <- update(m1, ~ . + cand_party)
 #m3 <- update(m2, ~ . + contbr_zip)
 
@@ -520,6 +597,7 @@ mtable(m1, m2)
 
 rm(frequent_contributors)
 ```
+
 That is an awful model.
 I'm not seeing a predictible relationship between the variables here, I suspect there's hidden motivators not in this data set.
 
@@ -531,7 +609,7 @@ Donations mostly came from urban areas.  Urban areas were also more likely to be
 It was also interesting that retirees were donating higher amounts to the Republican party.  As a whole, retirees donated almost purple--the sum of democrat donations vs the sum of republican donations is very similar as a part of the total  donations in Colorado.
 
 ### OPTIONAL: Did you create any models with your dataset? Discuss the strengths and limitations of your model.
-I created a model and was completely unable to predict where someone would donate based on 
+I created a model and was completely unable to predict how much someone would donate based on the interaction between the frequency of donations and the candidate party.
 
 ------
 
@@ -539,23 +617,20 @@ I created a model and was completely unable to predict where someone would donat
 
 ### Plot One
 ```{r echo=FALSE, Plot_One}
-p <- plot_ly(donations_by_party, labels = ~cand_party, values = ~total_donation, type = 'pie',
-          textposition = 'inside',
-          textinfo = 'label+percent',
-          insidetextfont = list(color = "#FFFFFF"), #white to make it pop
-          hoverinfo = 'text',
-          text = ~paste(cand_party, '$', total_donation, 'dollars'),
-          marker = list(colors = colors,
-                        line = list(color = "#FFFFFF, width = 1")),
-          showlegend = FALSE) %>% 
-  layout(title = 'United States Colorado Political Donations by Party in 2016 Election',
-         #showgrid = FALSE hides the grid. zeroline is the 0,0 line,
-            #ticklabels are the numbers on grid.
-         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
-         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
-
-ggplotly(p, filename = "pie/styled")
-
+plot_ly(donations_by_party, labels = ~cand_party,
+        values = ~total_donation) %>% 
+  add_pie(hole = 0.6) %>% 
+  layout(
+     title = 'United States Colorado Political Donations by Party in 2016 Election',
+     showlegend = T,
+     xaxis = list(showgrid = FALSE,
+                  zeroline = FALSE,
+                  showticklabels = FALSE),
+                  yaxis = list(showgrid = FALSE,
+                  zeroline = FALSE,
+                  showticklabels = FALSE)
+  )
+  
 rm(donations_by_party)
 rm(p)
 ```
@@ -586,7 +661,7 @@ zip_choropleth(pfc.contb_zipparty_rollup,
                title = "Democrat/Republican Donation Difference by Zip Code",
                legend = "Monetary Difference",
                zip_zoom = colo_zip_cw$ZCTA_USE,
-               reference_map = TRUE)
+               reference_map = FALSE)
 
 rm(pfc.contb_zipparty_rollup)
 rm(colo_zip_cw)
@@ -605,4 +680,8 @@ In detail, I verified the news story that the Democratic funding strategy succes
 
 I suspected the difference between the financials could be due to the differnce between older and younger contributors, as the millenial vote was strongly Democratic this election season.  That was validated in the data--the split between retirees was almost even, while the split between non-retirees was rather high--8659734.69 dollars to 3794510.73 dollars.
 
-Lastly, I've heard that the red/blue split is heavily influenced by geography, with Republican voters living in the prarie and Democratic voters living in the mountains and highly populated urban areas.  This was validated in the data as seen in the difference between blue/Democratic fundraising and white/Republican fundraising in the choropleth map.
+Lastly, I've heard that the red/blue split is heavily influenced by geography, with Republican voters living in the prarie and Democratic voters living in the mountains and highly populated urban areas.  This was validated in the data as seen in the difference between blue/Democratic fundraising and white/Republican fundraising in the choropleth map. In future analysis, I'd like to combine this data with some reliable census data and look at donations vs the average family income and population.  With this, I could look at statistics for how the more heavily populated or higher income areas leaned toward various parties.
+
+Technically speaking, I found the greatest challenge in the choropleth maps.  I was highly interested in seeing how donations were spread geographically, and it took some time to find an appropriate library and documentation to do that in R.  I had to download a crosswalk for zip codes to ZTCA codes, as the r library relies on ZTCA codes and the data included zip codes.  
+
+The greatest success for benefit from time spent was adding political party -- I used wikipedia to manually build out a crosswalk for those, and it was very useful in graphing and grouping the data.  
