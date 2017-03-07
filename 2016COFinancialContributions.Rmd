@@ -135,17 +135,22 @@ c <- pfc %>%
   arrange(s)
 pfc$contbr_zip <- factor(pfc$contbr_zip, levels=c[["contbr_zip"]])
 
-x <- list(
+a <- list(
   title = "Zip Codes",
   showticklabels = TRUE
 )
 
-y <- list(
+b <- list(
   title = "Total Donated",
-  showticklabels = TRUE
+  showticklabels = TRUE,
+  type = "log"
 )
 
-plot_ly(c, x = ~contbr_zip, y = ~log10(s), type = "bar", text = ~paste('Zip: ', contbr_zip)) 
+plot_ly(c, x = ~contbr_zip, y = ~s, type = "bar",
+        text = ~paste('Zip: ', contbr_zip)) %>% 
+  layout(xaxis = a, yaxis = b, showlegend = FALSE,
+         margin = list(l = 50, r = 50, b = 100, t= 50, pad = 4))
+
 rm(c)
 ```
 
@@ -158,8 +163,11 @@ lg_city_list <- pfc %>%
   summarise(n = n())
 
 plot_ly(lg_city_list, x = ~contbr_city) %>% 
-  add_trace(y = ~log10(n), name = "Log10 of Number of Donations") %>% 
-  layout(yaxis = list(type = "log"), title = "Log10 of Donations by City")
+  add_trace(y = ~n, name = "Log10 of Number of Donations") %>% 
+  layout(title = "Log10 of Donations by City",
+         yaxis = list(type = "log", title ="Contributor City"),
+         margin=list(l = 50, r = 50, b = 150, t = 50, pad =4),
+         xaxis = list(tickfont = list(size=10), title = "Number of Donations"))
 
 rm(lg_city_list)
 
@@ -167,7 +175,11 @@ rm(lg_city_list)
 
 Are there occupations that are more likely to contribute?
 ```{r}
-plot_ly(x = pfc$contbr_occupation, data = pfc, type = "histogram")
+
+plotly_build(plot_ly(x = pfc$contbr_occupation, data = pfc, type = "histogram")) %>% 
+  layout(yaxis = list(type = "log"),
+         margin=list(l = 50, r = 50, b = 200, t = 50, pad =4),
+         xaxis = list(tickfont = list(size=10)))
 ```
 
 The largest groups are retirees. I did not expect retirees to be donating so actively.
@@ -193,19 +205,15 @@ donations_by_party <- pfc %>%
 donations_by_party %>% 
   plot_ly(labels = ~cand_party, values = ~total_donation, type = 'pie') %>% 
   layout(
-    title = 'United States Colorado Political Donations by Party in 2016 Election',
-    #showgrid = FALSE hides the grid. zeroline is the 0,0 line, ticklabels are the numbers on grid.
-    xaxis = list(
-      showgrid = FALSE,
-      zeroline = FALSE,
-      showticklabels = FALSE
-      ),
-    yaxis = list(
-      showgrid = FALSE,
-      zeroline = FALSE,
-      showticklabels = FALSE
-      )
-    )
+     title = 'United States Colorado Political Donations by Party in 2016 Election',
+     showlegend = T,
+     xaxis = list(showgrid = FALSE,
+                  zeroline = FALSE,
+                  showticklabels = FALSE),
+                  yaxis = list(showgrid = FALSE,
+                  zeroline = FALSE,
+                  showticklabels = FALSE)
+  )
 ```
 
 # Univariate Analysis
@@ -260,8 +268,11 @@ Did the giving patterns (many small donations, few large donations) vary across 
 Using log10 because these are financial amounts, and diff candidates (naturally) received very diff amounts in this state.  I'm not interested in how much total they received, but what that distro looks like.
 ```{r echo = FALSE, Bivariate_Funding_Histograms}
 plot_ly(subset(pfc, contb_receipt_amt > 0 & !is.na(cand_nm)),
-        y = ~log10(contb_receipt_amt), x = ~cand_nm, color = ~cand_party,
-        type = "box")
+        y = ~contb_receipt_amt, x = ~cand_nm, color = ~cand_party,
+        type = "box") %>% 
+  layout(yaxis = list(type = "log", title = "Receipt Amount"),
+         margin = list(l = 50, r = 50, b = 150, t = 25, pad = 2))
+
 ```
 
 Roll that up by party, keep log scale as total coming into various parties has lg difference.
@@ -493,7 +504,8 @@ How do financial amounts vary for retirees vs non-retirees with political party?
 ```{r echo = FALSE, Financials_by_Retiree_status}
 ggplotly(ggplot(filter(pfc, contb_receipt_amt > 0),
                 aes(x = retiree_status, y=contb_receipt_amt)) +
-  geom_violin(aes(fill = cand_party)))
+  geom_violin(aes(fill = cand_party)) +
+  scale_y_log10())
 ```
 
 Were different parties getting more for retirees vs non-retirees?
@@ -618,18 +630,13 @@ I created a model and was completely unable to predict how much someone would do
 
 ### Plot One
 ```{r echo=FALSE, Plot_One}
-plot_ly(donations_by_party, labels = ~cand_party,
-        values = ~total_donation) %>% 
-  add_pie(hole = 0.6) %>% 
+plot_ly(donations_by_party, x = ~cand_party,
+        y = ~total_donation, type = 'bar') %>% 
   layout(
      title = 'United States Colorado Political Donations by Party in 2016 Election',
-     showlegend = T,
-     xaxis = list(showgrid = FALSE,
-                  zeroline = FALSE,
-                  showticklabels = FALSE),
-                  yaxis = list(showgrid = FALSE,
-                  zeroline = FALSE,
-                  showticklabels = FALSE)
+     xaxis = list(title = "Candidate Party"),
+     yaxis = list(title = "Total Donation in Dollars")
+     
   )
   
 rm(donations_by_party)
@@ -660,7 +667,7 @@ The Democrat/Republican donation split for retirees in Colorado is almost purple
 ```{r echo=FALSE, Plot_Three}
 zip_choropleth(pfc.contb_zipparty_rollup,
                title = "Democrat/Republican Donation Difference by Zip Code",
-               legend = "Monetary Difference",
+               legend = "Monetary Difference in Dollars",
                zip_zoom = colo_zip_cw$ZCTA_USE,
                reference_map = FALSE)
 
@@ -668,7 +675,7 @@ rm(pfc.contb_zipparty_rollup)
 rm(colo_zip_cw)
 ```
 
-### Description Two
+### Description Three
 I overlaid the map to show how high population areas and 'resort' areas donated significantly more funds to Democratic candidates than Republican candidates in the 2016 election cycle.  The N/A areas are areas with very low population.  I'm using ZCTA instead of true Zip code because choropleth runs off ZCTA, as does census data.  In this graph, the bluest areas are the areas with the highest funding difference in favor of the Democratic party.
 
 ------
