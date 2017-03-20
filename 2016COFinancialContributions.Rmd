@@ -127,6 +127,11 @@ grid.arrange(p1, p2, nrow=1)
 
 ```
 
+When did this money come in?
+```{r contb_receipt_dt histogram}
+plot_ly(pfc, x = ~contb_receipt_dt)
+```
+
 Are there zip codes more likely to contribute?
 ```{r zip_code_contb}
 c <- pfc %>% 
@@ -185,7 +190,8 @@ plotly_build(plot_ly(x = pfc$contbr_occupation, data = pfc, type = "histogram"))
 The largest groups are retirees. I did not expect retirees to be donating so actively.
 Which candidate received more donations? I've heard Colorado is fairly purple.
 ```{r}
-plot_ly(x = pfc$cand_nm, data = pfc, type = "histogram")
+p <- qplot(pfc$cand_nm) + coord_flip()
+ggplotly(p)
 ```
 
 Let's check that by party
@@ -417,6 +423,36 @@ donations_by_retiree <-pfc %>%
 donations_by_retiree
 ```
 
+Is there a difference in donations by party?
+Filtering by the two primary parties to allow 1:1 comparison.
+```{r donations_by_party_ttest}
+t.test(contb_receipt_amt ~ cand_party,
+  data = filter(pfc, cand_party %in% c('democrat','republican'))
+)
+```
+
+There's clearly a difference in the means.  Is there a difference in population
+distribution as well?
+```{r donations_by_party_mannwhitney}
+wilcox.test(contb_receipt_amt ~ cand_party,
+            data = filter(pfc, cand_party %in% c('democrat','republican')))
+```
+
+How about a difference in donations by retiree status?
+```{r donations_by_retiree_ttest}
+t.test(contb_receipt_amt ~ retiree_status,
+            data = pfc)
+```
+
+A smaller, but still distinct difference between the means for retirees vs non-retirees.
+Is there a difference between population distributions here as well?
+```{r donations_by_retiree_mannwhitney}
+wilcox.test(contb_receipt_amt ~ retiree_status,
+            data = pfc)
+```
+These are also non-identical populations.  We can clearly show that the donation
+patterns between retirees and non-retirees are different.
+
 There's often an age split discussed in political news.  Are retirees in Colorado more likely to be democrat or republican?
 ```{r echo = FALSE, retiree_party}
 donations_by_retiree_xtable <- 
@@ -500,12 +536,39 @@ frequent_contributors %>%
   scale_y_log10()
 ```
 
+How did these contributions trend over time?
+```{r ReceiptAmount_by_ReceiptDate}
+p <- ggplot(aes(x = contb_receipt_dt, y = contb_receipt_amt, 
+                colour = cand_party, fill = cand_party),
+       data = filter(pfc, cand_party %in% c('democrat', 'republican'),
+                     contb_receipt_amt > 0)) +
+  #jitter to account for people feeling more generous on payday
+  geom_jitter(alpha = 1/20, shape = 21) +
+  geom_smooth(aes(colour = cand_party, fill = cand_party)) +
+  ylim(-3000, 3000) +
+  scale_y_log10()
+  
+ggplotly(p)
+```
+
+
 How do financial amounts vary for retirees vs non-retirees with political party?
 ```{r echo = FALSE, Financials_by_Retiree_status}
 ggplotly(ggplot(filter(pfc, contb_receipt_amt > 0),
                 aes(x = retiree_status, y=contb_receipt_amt)) +
   geom_violin(aes(fill = cand_party)) +
   scale_y_log10())
+```
+
+That's a bit noisy, let's try a box plot:
+```{r}
+
+plot_ly(subset(pfc, contb_receipt_amt > 0 & !is.na(cand_party)),
+        y = ~contb_receipt_amt, x = ~cand_party, color = ~retiree_status,
+        type = "box") %>% 
+  layout(yaxis = list(type = "log", title = "Receipt Amount"),
+         xaxis = list(title = "Candidate Party"),
+         boxmode = "group")
 ```
 
 Were different parties getting more for retirees vs non-retirees?
