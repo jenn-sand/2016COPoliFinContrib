@@ -259,7 +259,7 @@ normalized, there's one entry per donation (or refund)
 We could roll up to see how much each candidate received as a whole, or how much specific earmarks received, and drill down to see if someone in the state went over a contribution limit.
 
 ### What other features in the dataset do you think will help support your investigation into your feature(s) of interest?
-Each candidate is ID'd, and eafch contributor is specifically named, along with the date of hteir contribution and the amount of their contribution. Any memos with specific earmarks or refund memos are designated clearly.
+Each candidate is ID'd, and each contributor is specifically named, along with the date of hteir contribution and the amount of their contribution. Any memos with specific earmarks or refund memos are designated clearly.
 
 ### Did you create any new variables from existing variables in the dataset?
 Yes, I created a variable for party affiliation and a variable for ZCTA codes.
